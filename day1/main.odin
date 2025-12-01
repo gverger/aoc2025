@@ -29,81 +29,30 @@ first_part_update :: proc(current: state, clicks: int) -> state {
 	return {position = position, score = score}
 }
 
-naive_second_part_update :: proc(current: state, clicks: int) -> state {
-	position := current.position
-	score := current.score
-
-	if clicks > 0 {
-		for i := 0; i < clicks; i += 1 {
-			position += 1
-			if position == 100 {
-				position = 0
-				score += 1
-			}
-		}
-	} else if clicks < 0 {
-		for i := 0; i < -clicks; i += 1 {
-			position -= 1
-			if position == 0 {
-				score += 1
-			}
-			if position == -1 {
-				position = 99
-			}
-		}
-	}
-
-	return {position = position, score = score}
-}
-
 second_part_update :: proc(current: state, clicks: int) -> state {
 	position := current.position
 	score := current.score
 	clicks := clicks
 
+  score += abs(clicks) / 100
 	if clicks >= 100 {
-		score += clicks / 100
 		clicks = clicks %% 100
 	} else if clicks <= -100 {
-		score += (-clicks) / 100
 		clicks = -((-clicks) %% 100)
 	}
 
 	position += clicks
 	if position >= 100 {
-		position -= 100
 		score += 1
-	} else if position < 0 {
-		position += 100
-		if current.position > 0 {
-			score += 1
-    }
-  } else if position == 0 {
+	} else if position <= 0 && current.position > 0 {
     score += 1
   }
+  position = position %% 100
 
 	return {position = position, score = score}
 }
 
 main :: proc() {
-	when ODIN_DEBUG {
-		track: mem.Tracking_Allocator
-		mem.tracking_allocator_init(&track, context.allocator)
-		context.allocator = mem.tracking_allocator(&track)
-
-		defer {
-			if len(track.allocation_map) > 0 {
-				fmt.eprintf("=== %v allocations not freed: ===\n", len(track.allocation_map))
-				for _, entry in track.allocation_map {
-					fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
-				}
-			} else {
-				fmt.println("=== no allocation problem")
-			}
-			mem.tracking_allocator_destroy(&track)
-		}
-	}
-
 	if len(os.args) < 2 {
 		fmt.println("Missing argument: input file")
 		return
@@ -119,17 +68,22 @@ main :: proc() {
 
 	it := string(data)
 
-	state := state {
-		position = 50,
-		score    = 0,
-	}
+  first_state := state {
+    position = 50,
+    score    = 0,
+  }
+
+  second_state := state {
+    position = 50,
+    score    = 0,
+  }
 
 	for line in strings.split_lines_iterator(&it) {
 		if len(line) == 0 {
 			continue
 		}
 
-		operator := 1
+		operator: int
 		clicks := strconv.atoi(line[1:])
 
 		if line[0] == 'L' {
@@ -141,23 +95,12 @@ main :: proc() {
 			return
 		}
 
-		// state = first_part_update(state, operator * clicks)
-		old_state := state
-		sstate := second_part_update(old_state, operator * clicks)
-		state = naive_second_part_update(old_state, operator * clicks)
-		if state != sstate {
-			fmt.printfln(
-				"%s\tpos=%d\toperator=%d\tclicks=%d,update=%d",
-				line,
-				old_state.position,
-				operator,
-				clicks,
-				state.score - old_state.score,
-			)
-			fmt.printfln("correct:%v\twrong:%v", state, sstate)
-		}
+		old_state := second_state
+    first_state = first_part_update(first_state, operator * clicks)
+		second_state = second_part_update(second_state, operator * clicks)
 	}
 
-	fmt.printfln("score=%d\tposition=%d", state.score, state.position)
+	fmt.printfln("First  part: score=%d\tposition=%d", first_state.score, first_state.position)
+  fmt.printfln("Second part: score=%d\tposition=%d", second_state.score, second_state.position)
 
 }
