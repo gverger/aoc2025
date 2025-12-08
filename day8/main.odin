@@ -1,5 +1,6 @@
 package main
 
+import "core:slice/heap"
 import "core:slice"
 import "core:strconv"
 import "core:fmt"
@@ -22,22 +23,15 @@ create_forest :: proc(nb_sets: int) -> Forest {
   return f
 }
 
-forest_find :: proc(forest: Forest, n: int) -> int {
-  root := n
-  f := forest
-
-  for f[root].parent != root {
-    root = f[root].parent
-  }
-
+forest_find :: proc(f: Forest, n: int) -> int {
   n := n
-  for f[n].parent != root {
-    parent := f[n].parent
-    f[n].parent = root
-    n = parent
+
+  for f[n].parent != n {
+    f[n].parent = f[f[n].parent].parent
+    n = f[n].parent
   }
 
-  return root
+  return n
 }
 
 // return true if union has been performed, i.e. x and y where not in the same set
@@ -72,24 +66,26 @@ Edge :: struct {
   square_dist: int,
 }
 
+greater_dist :: proc(i, j: Edge) -> bool { return i.square_dist >= j.square_dist }
+
 part1 :: proc(points: []Vec3, limit: int) {
   f := create_forest(len(points))
 
-  edges := make([dynamic]Edge, 0)
+  all_edges := make([dynamic]Edge, 0, len(points)*(len(points)-1)/2)
   for p1, i in points {
     for p2, j in points[i+1:] {
-      append(&edges, Edge{a=i, b=j+i+1, square_dist=dist_squared(p1,p2)})
+      append(&all_edges, Edge{a=i, b=j+i+1, square_dist=dist_squared(p1,p2)})
     }
   }
+  edges := all_edges[:]
+  heap.make(edges, greater_dist)
 
-  slice.sort_by(edges[:], proc(i, j: Edge) -> bool { return i.square_dist <= j.square_dist })
-
-  for i in 0..<limit {
-    if i >= len(edges) {
-      break
-    }
-    e := edges[i]
+  for _ in 0..<limit {
+    heap.pop(edges, greater_dist)
+    e := edges[len(edges)-1]
     forest_union(f, e.a, e.b)
+
+    edges = edges[:len(edges)-1]
   }
 
   values := make([dynamic]int, 0, len(f))
@@ -98,6 +94,7 @@ part1 :: proc(points: []Vec3, limit: int) {
       append(&values, n.size)
     }
   }
+
   if len(values) < 3 {
     fmt.println("less that 3 connected components, here is the sizes of each:", values)
     return
@@ -111,21 +108,29 @@ part1 :: proc(points: []Vec3, limit: int) {
 part2 :: proc(points: []Vec3) {
   f := create_forest(len(points))
 
-  edges := make([dynamic]Edge, 0)
+  all_edges := make([dynamic]Edge, 0, len(points)*(len(points)-1)/2)
   for p1, i in points {
     for p2, j in points[i+1:] {
-      append(&edges, Edge{a=i, b=j+i+1, square_dist=dist_squared(p1,p2)})
+      append(&all_edges, Edge{a=i, b=j+i+1, square_dist=dist_squared(p1,p2)})
     }
   }
-
-  slice.sort_by(edges[:], proc(i, j: Edge) -> bool { return i.square_dist <= j.square_dist })
+  edges := all_edges[:]
+  heap.make(edges, greater_dist)
 
   score := 0
-  for e in edges {
+  nb_edges := 0
+  for len(edges) > 0 {
+    heap.pop(edges, greater_dist)
+    e := edges[len(edges)-1]
     done := forest_union(f, e.a, e.b)
     if done {
-      score = points[e.a].x * points[e.b].x
+      nb_edges += 1
+      if nb_edges >= len(points) - 1 {
+        score = points[e.a].x * points[e.b].x
+        break
+      }
     }
+    edges = edges[:len(edges)-1]
   }
 
   fmt.println("part2 =", score)
