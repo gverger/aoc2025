@@ -6,6 +6,59 @@ import "core:fmt"
 import "core:os"
 import "core:strings"
 
+Node :: struct {
+  parent: int,
+  size: int,
+}
+
+Forest :: []Node
+
+create_forest :: proc(nb_sets: int) -> Forest {
+  f := make(Forest, nb_sets)
+  for i in 0..<nb_sets {
+    f[i].parent = i
+    f[i].size = 1
+  }
+  return f
+}
+
+forest_find :: proc(forest: Forest, n: int) -> int {
+  root := n
+  f := forest
+
+  for f[root].parent != root {
+    root = f[root].parent
+  }
+
+  n := n
+  for f[n].parent != root {
+    parent := f[n].parent
+    f[n].parent = root
+    n = parent
+  }
+
+  return root
+}
+
+// return true if union has been performed, i.e. x and y where not in the same set
+forest_union :: proc(forest: Forest, x, y: int) -> bool {
+  x := forest_find(forest, x)
+  y := forest_find(forest, y)
+
+  if x == y {
+    return false
+  }
+
+  if forest[x].size < forest[y].size {
+    x, y = y, x
+  }
+
+  forest[y].parent = x
+  forest[x].size += forest[y].size
+
+  return true
+}
+
 Vec3::struct {
   x,y,z: int
 }
@@ -14,118 +67,79 @@ dist_squared :: proc(v1, v2: Vec3) -> int {
   return (v1.x - v2.x) * (v1.x-v2.x) + (v1.y - v2.y) * (v1.y-v2.y) + (v1.z - v2.z) * (v1.z-v2.z)
 }
 
-part1 :: proc(points: []Vec3) {
-  connex_comp := make([]int, len(points))
-  for _, i in connex_comp {
-    connex_comp[i] = i
+Edge :: struct {
+  a, b: int,
+  square_dist: int,
+}
+
+part1 :: proc(points: []Vec3, limit: int) {
+  f := create_forest(len(points))
+
+  edges := make([dynamic]Edge, 0)
+  for p1, i in points {
+    for p2, j in points[i+1:] {
+      append(&edges, Edge{a=i, b=j+i+1, square_dist=dist_squared(p1,p2)})
+    }
   }
 
-  all_min := -1
-  score := 0
-  for loops in 0..<1000 {
-    minp1 := 0
-    minp2 := 1
-    min_dist := -1
-    for p1, i in points {
-      for p2, j in points[i+1:] {
-        j := j + i + 1
-        dist := dist_squared(p1, p2)
-        if (min_dist == -1 || dist < min_dist) && all_min < dist {
-          min_dist = dist
-          minp1 = i
-          minp2 = j
-        }
-      }
-    }
-    if min_dist == -1 {
+  slice.sort_by(edges[:], proc(i, j: Edge) -> bool { return i.square_dist <= j.square_dist })
+
+  for i in 0..<limit {
+    if i >= len(edges) {
       break
     }
-
-    all_min = min_dist
-    c1 := connex_comp[minp1]
-    c2 := connex_comp[minp2]
-    if c1 == c2 {
-      continue
-    }
-    if c1 > c2 {
-      c2, c1 = c1, c2
-    }
-    for c, i in connex_comp {
-      if c == c2 {
-        connex_comp[i] = c1
-      }
-    }
+    e := edges[i]
+    forest_union(f, e.a, e.b)
   }
 
-  tallied := make(map[int]int)
-  for c, i in connex_comp {
-    n, ok := tallied[c]
-    if !ok {
-      n = 0
+  values := make([dynamic]int, 0, len(f))
+  for n,i in f {
+    if forest_find(f, i) == i {
+      append(&values, n.size)
     }
-
-    tallied[c] = n+1
+  }
+  if len(values) < 3 {
+    fmt.println("less that 3 connected components, here is the sizes of each:", values)
+    return
   }
 
-  values := make([dynamic]int, 0, len(tallied))
-  for _, v in tallied {
-    append(&values, v)
-  }
   slice.reverse_sort(values[:])
 
-  fmt.println(values)
   fmt.println("part1 =", values[0] * values[1] * values[2])
 }
 
 part2 :: proc(points: []Vec3) {
-  connex_comp := make([]int, len(points))
-  for _, i in connex_comp {
-    connex_comp[i] = i
+  f := create_forest(len(points))
+
+  edges := make([dynamic]Edge, 0)
+  for p1, i in points {
+    for p2, j in points[i+1:] {
+      append(&edges, Edge{a=i, b=j+i+1, square_dist=dist_squared(p1,p2)})
+    }
   }
 
-  score := 0
-  for loops in 0..<len(points)-1 {
-    minp1 := 0
-    minp2 := 1
-    min_dist := -1
-    for p1, i in points {
-      for p2, j in points[i+1:] {
-        j := j + i + 1
-        if connex_comp[i] == connex_comp[j] {
-          continue
-        }
-        dist := dist_squared(p1, p2)
-        if min_dist == -1 || dist < min_dist {
-          min_dist = dist
-          minp1 = i
-          minp2 = j
-        }
-      }
-    }
+  slice.sort_by(edges[:], proc(i, j: Edge) -> bool { return i.square_dist <= j.square_dist })
 
-    c1 := connex_comp[minp1]
-    c2 := connex_comp[minp2]
-    if c1 > c2 {
-      c2, c1 = c1, c2
+  score := 0
+  for e in edges {
+    done := forest_union(f, e.a, e.b)
+    if done {
+      score = points[e.a].x * points[e.b].x
     }
-    for c, i in connex_comp {
-      if c == c2 {
-        connex_comp[i] = c1
-      }
-    }
-    score = points[minp1].x * points[minp2].x
   }
 
   fmt.println("part2 =", score)
 }
 
 main :: proc() {
-  if len(os.args) < 2 {
-    fmt.println("Missing argument: input file")
+  if len(os.args) < 3 {
+    fmt.println("Missing argument: ex: ./day8 input.txt 1000")
     return
   }
 
   data, ok := os.read_entire_file_from_filename(os.args[1])
+
+  limit := strconv.atoi(os.args[2])
 
   if !ok {
     os.exit(1)
@@ -148,10 +162,9 @@ main :: proc() {
       z = strconv.atoi(args[2]),
     }
 
-    fmt.println(point)
     append(&points, point)
   }
 
-  part1(points[:])
+  part1(points[:], limit)
   part2(points[:])
 }
